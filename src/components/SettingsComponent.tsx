@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { X, Bell, BellOff, Save, Check } from 'lucide-react';
-import { api } from './supabase-config';
+import { api } from '../lib/supabase';
 
-export default function SettingsComponent({ userId, onClose, darkMode, onUpdate }) {
+interface SettingsComponentProps {
+  userId: string;
+  onClose: () => void;
+  darkMode: boolean;
+  onUpdate?: (data: any) => void;
+}
+
+export default function SettingsComponent({ userId, onClose, darkMode, onUpdate }: SettingsComponentProps) {
   const [settings, setSettings] = useState({
     notify_listing_sold: true,
     notify_listing_resumed: true,

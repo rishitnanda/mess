@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import ProfileComponent from '../components/ProfileComponent';
+import SettingsComponent from '../components/SettingsComponent';
 import { Clock, Users, IndianRupee, X, Menu, Home, ListPlus, Settings, User, Moon, Sun, QrCode, Info, Trash2, Bell, Upload, AlertCircle, CheckCircle, CreditCard } from 'lucide-react';
 
 const MESS_OPTIONS = ['Mess 1 - Veg', 'Mess 1 - Non-Veg', 'Mess 2', 'Mess 3'];
@@ -296,8 +298,20 @@ const PaymentFlow = ({ auctions, onComplete, onTimeout, darkMode }) => {
   );
 };
 
+interface HomeProps {
+  darkMode: boolean;
+  currentUser: any;
+  onShowProfile: () => void;
+  onShowSettings: () => void;
+}
+
 // Main App
-export default function MessAuctionSystem() {
+export default function Home({ 
+  darkMode, 
+  currentUser, 
+  onShowProfile, 
+  onShowSettings 
+}: HomeProps) {
   const [listings, setListings] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [currentUser] = useState('User123');

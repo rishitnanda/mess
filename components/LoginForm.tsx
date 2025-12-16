@@ -3,6 +3,7 @@ import { Eye, EyeOff, Lock, Mail, Phone, User, Calendar, GraduationCap, Shield }
 
 interface LoginFormProps {
   darkMode: boolean;
+  onLogin: (user: { id: string; name: string; email: string }) => void;
 }
 
 type AuthMode = 'login' | 'signup' | 'otp-verify' | 'signup-details';
@@ -72,6 +73,14 @@ export function LoginForm({ darkMode }: LoginFormProps) {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+
+    onLogin({ 
+      id: `user_${Date.now()}`,
+      name: loginInput,
+      email: loginMethod === 'email' ? loginInput : `${loginInput}@phone.com`
+    });
+  };
+  
     console.log('Login attempted with:', { 
       method: loginMethod,
       loginInput, 

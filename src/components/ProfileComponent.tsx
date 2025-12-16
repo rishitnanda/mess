@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, User, Mail, Phone, QrCode, Camera } from 'lucide-react';
-import { api } from '@/lib/supabase';
+import { api } from '../lib/supabase';
 
-export default function ProfileComponent({ userId, onClose, darkMode, onUpdate }) {
+interface ProfileComponentProps {
+  userId: string;
+  onClose: () => void;
+  darkMode: boolean;
+  onUpdate?: (data: any) => void;
+}
+
+export default function ProfileComponent({ 
+  userId, 
+  onClose, 
+  darkMode, 
+  onUpdate 
+}: ProfileComponentProps) {
   const [profile, setProfile] = useState({
     name: '',
     email: '',
