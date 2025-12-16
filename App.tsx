@@ -11,7 +11,7 @@ export default function App() {
       <button
         type="button"
         onClick={() => setDarkMode(!darkMode)}
-        className={`absolute top-6 right-6 p-3 rounded-lg ${
+        className={`absolute top-6 right-6 p-3 rounded-lg z-10 ${
           darkMode 
             ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' 
             : 'bg-white text-gray-600 hover:bg-gray-100'
