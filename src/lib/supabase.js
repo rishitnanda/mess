@@ -1,8 +1,15 @@
-// supabase/config.js
+// src/lib/supabase.ts
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// ISSUE 1: Using NEXT_PUBLIC_ prefix - this is for Next.js
+// For Vite (React), use VITE_ prefix instead
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+
+// ISSUE 2: Need to check if credentials exist
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase credentials. Please check your .env file.')
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -107,10 +114,12 @@ ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 -- Profiles policies
 CREATE POLICY "Users can view all profiles" ON public.profiles FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Settings policies
 CREATE POLICY "Users can view own settings" ON public.user_settings FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own settings" ON public.user_settings FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own settings" ON public.user_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Listings policies
 CREATE POLICY "Anyone can view active listings" ON public.listings FOR SELECT USING (status = 'active');
@@ -131,10 +140,64 @@ CREATE POLICY "Users can view own payments" ON public.payments FOR SELECT USING 
 CREATE POLICY "Users can create payments" ON public.payments FOR INSERT WITH CHECK (auth.uid() = buyer_id);
 */
 
+// Type definitions
+interface Profile {
+  id: string
+  name: string | null
+  email: string | null
+  phone: string | null
+  mess_qr: string | null
+  profile_pic: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface Settings {
+  user_id: string
+  notify_listing_sold: boolean
+  notify_listing_resumed: boolean
+  notify_auction_won: boolean
+  notify_auction_lost: boolean
+  notify_lost_auction_resumes: boolean
+  notify_price_reduced: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface Listing {
+  id: string
+  seller_id: string
+  mess: string
+  meal_time: string
+  date: string
+  is_auction: boolean
+  target_price: number
+  current_price: number
+  price_drop_amount: number
+  price_drop_interval: number
+  auction_duration: number
+  longer_bids: boolean
+  status: string
+  end_time: string
+  drop_count: number
+  created_at: string
+  updated_at: string
+  bids?: Bid[]
+  profiles?: Profile
+}
+
+interface Bid {
+  id: string
+  listing_id: string
+  bidder_id: string
+  amount: number
+  created_at: string
+}
+
 // API Functions
 export const api = {
   // Profile
-  async getProfile(userId) {
+  async getProfile(userId: string) {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -143,17 +206,17 @@ export const api = {
     return { data, error }
   },
 
-  async updateProfile(userId, updates) {
+  async updateProfile(userId: string, updates: Partial<Profile>) {
     const { data, error } = await supabase
       .from('profiles')
-      .update({ ...updates, updated_at: new Date() })
+      .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', userId)
       .select()
       .single()
     return { data, error }
   },
 
-  async uploadProfilePic(userId, file) {
+  async uploadProfilePic(userId: string, file: File) {
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}.${fileExt}`
     const { data, error } = await supabase.storage
@@ -162,15 +225,15 @@ export const api = {
     
     if (error) return { data: null, error }
     
-    const { data: { publicUrl } } = supabase.storage
+    const { data: urlData } = supabase.storage
       .from('profile-pics')
       .getPublicUrl(fileName)
     
-    return { data: publicUrl, error: null }
+    return { data: urlData.publicUrl, error: null }
   },
 
   // Settings
-  async getSettings(userId) {
+  async getSettings(userId: string) {
     const { data, error } = await supabase
       .from('user_settings')
       .select('*')
@@ -179,17 +242,17 @@ export const api = {
     return { data, error }
   },
 
-  async updateSettings(userId, settings) {
+  async updateSettings(userId: string, settings: Partial<Settings>) {
     const { data, error } = await supabase
       .from('user_settings')
-      .upsert({ user_id: userId, ...settings, updated_at: new Date() })
+      .upsert({ user_id: userId, ...settings, updated_at: new Date().toISOString() })
       .select()
       .single()
     return { data, error }
   },
 
   // Listings
-  async createListing(listingData) {
+  async createListing(listingData: Partial<Listing>) {
     const { data, error } = await supabase
       .from('listings')
       .insert([listingData])
@@ -198,7 +261,7 @@ export const api = {
     return { data, error }
   },
 
-  async getListings(filters = {}) {
+  async getListings(filters: { mess?: string; dateFrom?: string; dateTo?: string } = {}) {
     let query = supabase
       .from('listings')
       .select('*, bids(*), profiles!seller_id(*)')
@@ -213,20 +276,20 @@ export const api = {
     return { data, error }
   },
 
-  async updateListing(listingId, updates) {
+  async updateListing(listingId: string, updates: Partial<Listing>) {
     const { data, error } = await supabase
       .from('listings')
-      .update({ ...updates, updated_at: new Date() })
+      .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', listingId)
       .select()
       .single()
     return { data, error }
   },
 
-  async deleteListing(listingId) {
+  async deleteListing(listingId: string) {
     const { data, error } = await supabase
       .from('listings')
-      .update({ status: 'unlisted', updated_at: new Date() })
+      .update({ status: 'unlisted', updated_at: new Date().toISOString() })
       .eq('id', listingId)
       .select()
       .single()
@@ -234,7 +297,7 @@ export const api = {
   },
 
   // Bids
-  async placeBid(listingId, bidderId, amount) {
+  async placeBid(listingId: string, bidderId: string, amount: number) {
     const { data, error } = await supabase
       .from('bids')
       .insert([{ listing_id: listingId, bidder_id: bidderId, amount }])
@@ -243,7 +306,7 @@ export const api = {
     return { data, error }
   },
 
-  async withdrawBids(listingId, bidderId) {
+  async withdrawBids(listingId: string, bidderId: string) {
     const { data, error } = await supabase
       .from('bids')
       .delete()
@@ -254,7 +317,7 @@ export const api = {
   },
 
   // Notifications
-  async createNotification(userId, title, message) {
+  async createNotification(userId: string, title: string, message: string) {
     const { data, error } = await supabase
       .from('notifications')
       .insert([{ user_id: userId, title, message }])
@@ -263,7 +326,7 @@ export const api = {
     return { data, error }
   },
 
-  async getNotifications(userId) {
+  async getNotifications(userId: string) {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
@@ -273,7 +336,7 @@ export const api = {
     return { data, error }
   },
 
-  async markNotificationRead(notificationId) {
+  async markNotificationRead(notificationId: string) {
     const { data, error } = await supabase
       .from('notifications')
       .update({ read: true })
@@ -284,7 +347,7 @@ export const api = {
   },
 
   // Payments
-  async createPayment(listingId, buyerId, sellerId, amount) {
+  async createPayment(listingId: string, buyerId: string, sellerId: string, amount: number) {
     const { data, error } = await supabase
       .from('payments')
       .insert([{ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId, amount }])
@@ -293,10 +356,10 @@ export const api = {
     return { data, error }
   },
 
-  async updatePayment(paymentId, status, transactionId = null) {
-    const updates = { status, updated_at: new Date() }
+  async updatePayment(paymentId: string, status: string, transactionId: string | null = null) {
+    const updates: any = { status, updated_at: new Date().toISOString() }
     if (status === 'completed') {
-      updates.completed_at = new Date()
+      updates.completed_at = new Date().toISOString()
       if (transactionId) updates.upi_transaction_id = transactionId
     }
     
@@ -310,14 +373,14 @@ export const api = {
   },
 
   // Real-time subscriptions
-  subscribeToListings(callback) {
+  subscribeToListings(callback: (payload: any) => void) {
     return supabase
       .channel('listings-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'listings' }, callback)
       .subscribe()
   },
 
-  subscribeToBids(listingId, callback) {
+  subscribeToBids(listingId: string, callback: (payload: any) => void) {
     return supabase
       .channel(`bids-${listingId}`)
       .on('postgres_changes', { 
@@ -329,7 +392,7 @@ export const api = {
       .subscribe()
   },
 
-  subscribeToNotifications(userId, callback) {
+  subscribeToNotifications(userId: string, callback: (payload: any) => void) {
     return supabase
       .channel(`notifications-${userId}`)
       .on('postgres_changes', { 
@@ -343,14 +406,14 @@ export const api = {
 }
 
 // Helper function for auction logic with 2-drop rule
-export async function handlePriceDropLogic(listing) {
-  const bids = await supabase
+export async function handlePriceDropLogic(listing: Listing) {
+  const { data: bids } = await supabase
     .from('bids')
-    .select('amount')
+    .select('amount, bidder_id')
     .eq('listing_id', listing.id)
     .order('amount', { ascending: false })
   
-  const highestBid = bids.data?.[0]?.amount || 0
+  const highestBid = bids?.[0]?.amount || 0
   
   // Non-auction mode with 2-drop rule
   if (!listing.is_auction && highestBid > 0 && highestBid < listing.current_price) {
@@ -359,7 +422,7 @@ export async function handlePriceDropLogic(listing) {
       await api.updateListing(listing.id, {
         current_price: newPrice,
         drop_count: listing.drop_count + 1,
-        end_time: new Date(Date.now() + listing.price_drop_interval * 60000)
+        end_time: new Date(Date.now() + listing.price_drop_interval * 60000).toISOString()
       })
       
       // Notify seller
@@ -371,7 +434,7 @@ export async function handlePriceDropLogic(listing) {
     } else {
       // After 2 drops, sell to highest bidder
       await api.updateListing(listing.id, { status: 'sold' })
-      const highestBidder = bids.data?.[0]
+      const highestBidder = bids?.[0]
       if (highestBidder) {
         await api.createNotification(
           highestBidder.bidder_id,
