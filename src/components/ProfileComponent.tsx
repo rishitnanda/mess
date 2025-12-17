@@ -2,11 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { X, Upload, User, Mail, Phone, QrCode, Camera } from 'lucide-react';
 import { api } from '../lib/supabase';
 
+// FIXED: Proper type definitions
+interface ProfileData {
+  id?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  mess_qr?: string;
+  profile_pic?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 interface ProfileComponentProps {
   userId: string;
   onClose: () => void;
   darkMode: boolean;
-  onUpdate?: (data: any) => void;
+  onUpdate?: (data: ProfileData) => void;
+}
+
+interface ProfileState {
+  name: string;
+  email: string;
+  phone: string;
+  messQR: string;
+  profilePic: string | null;
 }
 
 export default function ProfileComponent({ 
@@ -15,7 +35,7 @@ export default function ProfileComponent({
   darkMode, 
   onUpdate 
 }: ProfileComponentProps) {
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<ProfileState>({
     name: '',
     email: '',
     phone: '',
@@ -26,8 +46,8 @@ export default function ProfileComponent({
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [hasActiveItems, setHasActiveItems] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     loadProfile();
@@ -45,31 +65,38 @@ export default function ProfileComponent({
         messQR: data.mess_qr || '',
         profilePic: data.profile_pic || null
       });
-      setImagePreview(data.profile_pic);
+      setImagePreview(data.profile_pic || null);
+    }
+    if (error) {
+      console.error('Error loading profile:', error);
     }
     setLoading(false);
   };
 
   const checkActiveItems = async () => {
-    // Check if user has active listings or bids
-    const { data: listings } = await api.getListings();
-    const userListings = listings?.filter(l => l.seller_id === userId && l.status === 'active') || [];
-    
-    const { data: allListings } = await api.getListings();
-    const userBids = allListings?.filter(l => 
-      l.bids?.some(b => b.bidder_id === userId)
-    ) || [];
-    
-    setHasActiveItems(userListings.length > 0 || userBids.length > 0);
+    try {
+      // Check if user has active listings or bids
+      const { data: listings } = await api.getListings();
+      const userListings = listings?.filter(l => l.seller_id === userId && l.status === 'active') || [];
+      
+      const { data: allListings } = await api.getListings();
+      const userBids = allListings?.filter(l => 
+        Array.isArray(l.bids) && l.bids.some(b => b.bidder_id === userId)
+      ) || [];
+      
+      setHasActiveItems(userListings.length > 0 || userBids.length > 0);
+    } catch (error) {
+      console.error('Error checking active items:', error);
+    }
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreview(reader.result);
+        setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -94,7 +121,7 @@ export default function ProfileComponent({
         email: profile.email,
         phone: profile.phone,
         mess_qr: profile.messQR,
-        profile_pic: profilePicUrl
+        profile_pic: profilePicUrl || undefined
       });
       
       if (error) throw error;
@@ -103,7 +130,7 @@ export default function ProfileComponent({
       setEditMode(false);
       setImageFile(null);
       
-      if (onUpdate) onUpdate(data);
+      if (onUpdate && data) onUpdate(data);
       
       alert('Profile updated successfully!');
     } catch (error) {

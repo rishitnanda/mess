@@ -1,16 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { X, Bell, BellOff, Save, Check } from 'lucide-react';
+import { X, Bell, Save, Check } from 'lucide-react';
 import { api } from '../lib/supabase';
+
+// FIXED: Proper type definitions
+interface SettingsData {
+  user_id?: string;
+  notify_listing_sold: boolean;
+  notify_listing_resumed: boolean;
+  notify_auction_won: boolean;
+  notify_auction_lost: boolean;
+  notify_lost_auction_resumes: boolean;
+  notify_price_reduced: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface SettingsComponentProps {
   userId: string;
   onClose: () => void;
   darkMode: boolean;
-  onUpdate?: (data: any) => void;
+  onUpdate?: (data: SettingsData) => void;
 }
 
-export default function SettingsComponent({ userId, onClose, darkMode, onUpdate }: SettingsComponentProps) {
-  const [settings, setSettings] = useState({
+interface SettingsState {
+  notify_listing_sold: boolean;
+  notify_listing_resumed: boolean;
+  notify_auction_won: boolean;
+  notify_auction_lost: boolean;
+  notify_lost_auction_resumes: boolean;
+  notify_price_reduced: boolean;
+}
+
+interface SettingConfig {
+  key: keyof SettingsState;
+  title: string;
+  description: string;
+  icon: string;
+}
+
+export default function SettingsComponent({ 
+  userId, 
+  onClose, 
+  darkMode, 
+  onUpdate 
+}: SettingsComponentProps) {
+  const [settings, setSettings] = useState<SettingsState>({
     notify_listing_sold: true,
     notify_listing_resumed: true,
     notify_auction_won: true,
@@ -28,21 +62,29 @@ export default function SettingsComponent({ userId, onClose, darkMode, onUpdate 
 
   const loadSettings = async () => {
     setLoading(true);
-    const { data, error } = await api.getSettings(userId);
-    if (data) {
-      setSettings({
-        notify_listing_sold: data.notify_listing_sold,
-        notify_listing_resumed: data.notify_listing_resumed,
-        notify_auction_won: data.notify_auction_won,
-        notify_auction_lost: data.notify_auction_lost,
-        notify_lost_auction_resumes: data.notify_lost_auction_resumes,
-        notify_price_reduced: data.notify_price_reduced
-      });
+    try {
+      const { data, error } = await api.getSettings(userId);
+      if (data) {
+        setSettings({
+          notify_listing_sold: data.notify_listing_sold,
+          notify_listing_resumed: data.notify_listing_resumed,
+          notify_auction_won: data.notify_auction_won,
+          notify_auction_lost: data.notify_auction_lost,
+          notify_lost_auction_resumes: data.notify_lost_auction_resumes,
+          notify_price_reduced: data.notify_price_reduced
+        });
+      }
+      if (error) {
+        console.error('Error loading settings:', error);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const toggleSetting = (key) => {
+  const toggleSetting = (key: keyof SettingsState) => {
     setSettings(prev => ({
       ...prev,
       [key]: !prev[key]
@@ -59,7 +101,7 @@ export default function SettingsComponent({ userId, onClose, darkMode, onUpdate 
       if (error) throw error;
       
       setSaved(true);
-      if (onUpdate) onUpdate(data);
+      if (onUpdate && data) onUpdate(data);
       
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -70,7 +112,7 @@ export default function SettingsComponent({ userId, onClose, darkMode, onUpdate 
     }
   };
 
-  const settingsConfig = [
+  const settingsConfig: SettingConfig[] = [
     {
       key: 'notify_listing_sold',
       title: 'Listing Sold',
@@ -202,8 +244,10 @@ export default function SettingsComponent({ userId, onClose, darkMode, onUpdate 
           <div className="flex gap-2">
             <button
               onClick={() => {
-                const newSettings = { ...settings };
-                Object.keys(newSettings).forEach(key => newSettings[key] = true);
+                const newSettings: SettingsState = { ...settings };
+                Object.keys(newSettings).forEach(key => {
+                  newSettings[key as keyof SettingsState] = true;
+                });
                 setSettings(newSettings);
                 setSaved(false);
               }}
@@ -217,8 +261,10 @@ export default function SettingsComponent({ userId, onClose, darkMode, onUpdate 
             </button>
             <button
               onClick={() => {
-                const newSettings = { ...settings };
-                Object.keys(newSettings).forEach(key => newSettings[key] = false);
+                const newSettings: SettingsState = { ...settings };
+                Object.keys(newSettings).forEach(key => {
+                  newSettings[key as keyof SettingsState] = false;
+                });
                 setSettings(newSettings);
                 setSaved(false);
               }}

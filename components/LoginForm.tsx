@@ -10,7 +10,7 @@ type AuthMode = 'login' | 'signup' | 'otp-verify' | 'signup-details';
 type LoginMethod = 'email' | 'phone';
 type SignUpMethod = 'email' | 'phone' | 'google';
 
-export function LoginForm({ darkMode }: LoginFormProps) {
+export function LoginForm({ darkMode, onLogin }: LoginFormProps) {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [signUpMethod, setSignUpMethod] = useState<SignUpMethod>('email');
@@ -71,23 +71,22 @@ export function LoginForm({ darkMode }: LoginFormProps) {
     return phoneRegex.test(phone.replace(/\s/g, ''));
   };
 
+  // FIXED: Removed duplicate function declaration
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-
-    onLogin({ 
-      id: `user_${Date.now()}`,
-      name: loginInput,
-      email: loginMethod === 'email' ? loginInput : `${loginInput}@phone.com`
-    });
-  };
-  
+    
     console.log('Login attempted with:', { 
       method: loginMethod,
       loginInput, 
       password, 
       rememberMe 
     });
-    // Handle login logic here
+
+    onLogin({ 
+      id: `user_${Date.now()}`,
+      name: loginInput,
+      email: loginMethod === 'email' ? loginInput : `${loginInput}@phone.com`
+    });
   };
 
   const handleSignUp = (e: React.FormEvent) => {
@@ -158,7 +157,6 @@ export function LoginForm({ darkMode }: LoginFormProps) {
       name,
       age,
       collegeEmail,
-      // Previous sign up data would be included here
     });
     // After completion, switch to login mode or auto-login
     setAuthMode('login');
