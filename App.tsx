@@ -4,117 +4,13 @@ import Home from './pages/Home'
 import ProfileComponent from './components/ProfileComponent'
 import SettingsComponent from './components/SettingsComponent'
 
-// FIX 1: Define User interface
+// Define User interface
 interface User {
   id: string
   name: string
   email: string
 }
 
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  
-  // FIX 2: Properly type currentUser as User | null
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  
-  const [darkMode, setDarkMode] = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-
-  return (
-    <div className={darkMode ? 'dark' : ''}>
-      {!isAuthenticated ? (
-        <LoginForm 
-          darkMode={darkMode}
-          onLogin={(user) => {
-            setIsAuthenticated(true)
-            setCurrentUser(user)
-          }}
-        />
-      ) : (
-        <>
-          <Home 
-            darkMode={darkMode}
-            currentUser={currentUser}
-            onShowProfile={() => setShowProfile(true)}
-            onShowSettings={() => setShowSettings(true)}
-          />
-          
-          {/* FIX 3: Add null check before accessing currentUser.id */}
-          {showProfile && currentUser && (
-            <ProfileComponent
-              userId={currentUser.id}
-              darkMode={darkMode}
-              onClose={() => setShowProfile(false)}
-            />
-          )}
-          
-          {/* FIX 4: Add null check here too */}
-          {showSettings && currentUser && (
-            <SettingsComponent
-              userId={currentUser.id}
-              darkMode={darkMode}
-              onClose={() => setShowSettings(false)}
-            />
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-// ===== ALTERNATIVE FIX (Non-null assertion) =====
-// If you're 100% sure currentUser exists when isAuthenticated is true:
-
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [darkMode, setDarkMode] = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-
-  return (
-    <div className={darkMode ? 'dark' : ''}>
-      {!isAuthenticated ? (
-        <LoginForm 
-          darkMode={darkMode}
-          onLogin={(user) => {
-            setIsAuthenticated(true)
-            setCurrentUser(user)
-          }}
-        />
-      ) : (
-        <>
-          <Home 
-            darkMode={darkMode}
-            currentUser={currentUser}
-            onShowProfile={() => setShowProfile(true)}
-            onShowSettings={() => setShowSettings(true)}
-          />
-          
-          {/* Using non-null assertion (!) - use with caution */}
-          {showProfile && (
-            <ProfileComponent
-              userId={currentUser!.id}
-              darkMode={darkMode}
-              onClose={() => setShowProfile(false)}
-            />
-          )}
-          
-          {showSettings && (
-            <SettingsComponent
-              userId={currentUser!.id}
-              darkMode={darkMode}
-              onClose={() => setShowSettings(false)}
-            />
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-// ===== BEST PRACTICE FIX (Early return) =====
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -137,12 +33,12 @@ export default function App() {
     )
   }
 
-  // Authenticated but no user data - shouldn't happen, but safe guard
+  // Authenticated but no user data - safety check
   if (!currentUser) {
     return <div>Loading...</div>
   }
 
-  // Authenticated with user - now currentUser is guaranteed non-null
+  // Authenticated with user - currentUser is guaranteed non-null here
   return (
     <div className={darkMode ? 'dark' : ''}>
       <Home 
@@ -152,7 +48,6 @@ export default function App() {
         onShowSettings={() => setShowSettings(true)}
       />
       
-      {/* Now TypeScript knows currentUser is not null */}
       {showProfile && (
         <ProfileComponent
           userId={currentUser.id}
