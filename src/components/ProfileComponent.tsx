@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Upload, User, Mail, Phone, QrCode, Camera } from 'lucide-react';
 import { api } from '../lib/supabase';
 
@@ -81,7 +81,7 @@ export default function ProfileComponent({
       
       const { data: allListings } = await api.getListings();
       const userBids = allListings?.filter(l => 
-        Array.isArray(l.bids) && l.bids.some(b => b.bidder_id === userId)
+        Array.isArray(l.bids) && l.bids.some((b: any) => b.bidder_id === userId)
       ) || [];
       
       setHasActiveItems(userListings.length > 0 || userBids.length > 0);

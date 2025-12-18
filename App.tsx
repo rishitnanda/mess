@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { LoginForm } from './components/LoginForm'
-import Home from './pages/Home'
-import ProfileComponent from './components/ProfileComponent'
-import SettingsComponent from './components/SettingsComponent'
+import Home from './src/pages/Home'
+import ProfileComponent from './src/components/ProfileComponent'
+import SettingsComponent from './src/components/SettingsComponent'
 import { Moon, Sun } from 'lucide-react'
 
 // Define User interface
@@ -10,6 +10,24 @@ interface User {
   id: string
   name: string
   email: string
+}
+
+// Define proper types for update callbacks
+interface ProfileUpdateData {
+  name?: string;
+  email?: string;
+  phone?: string;
+  mess_qr?: string;
+  profile_pic?: string | null;
+}
+
+interface SettingsUpdateData {
+  notify_listing_sold?: boolean;
+  notify_listing_resumed?: boolean;
+  notify_auction_won?: boolean;
+  notify_auction_lost?: boolean;
+  notify_lost_auction_resumes?: boolean;
+  notify_price_reduced?: boolean;
 }
 
 export default function App() {
@@ -84,7 +102,7 @@ export default function App() {
           userId={currentUser.id}
           darkMode={darkMode}
           onClose={() => setShowProfile(false)}
-          onUpdate={(updatedData) => {
+          onUpdate={(updatedData: ProfileUpdateData) => {
             // Update user data if needed
             if (updatedData) {
               setCurrentUser({
@@ -102,7 +120,7 @@ export default function App() {
           userId={currentUser.id}
           darkMode={darkMode}
           onClose={() => setShowSettings(false)}
-          onUpdate={(updatedSettings) => {
+          onUpdate={(updatedSettings: SettingsUpdateData) => {
             console.log('Settings updated:', updatedSettings)
           }}
         />

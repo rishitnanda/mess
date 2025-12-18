@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, Users, IndianRupee, X, Menu, Home as HomeIcon, ListPlus, Settings, User, Moon, Sun, QrCode, Trash2, Bell, CheckCircle, CreditCard, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, Users, IndianRupee, X, Menu, Home as HomeIcon, ListPlus, Settings, User, QrCode, Trash2, Bell } from 'lucide-react';
 
-const MESS_OPTIONS = ['Mess 1 - Veg', 'Mess 1 - Non-Veg', 'Mess 2', 'Mess 3'];
-const MEAL_TIMES = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
+// Export constants for use in other components
+export const MESS_OPTIONS = ['Mess 1 - Veg', 'Mess 1 - Non-Veg', 'Mess 2', 'Mess 3'];
+export const MEAL_TIMES = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
 
 // Types
 interface Bid {
@@ -53,7 +54,8 @@ const getTimeRemaining = (endTime: number) => {
   return { expired: false, display: `${mins}:${secs.toString().padStart(2, '0')}`, seconds: Math.floor(remaining/1000) };
 };
 
-const generateUPIQR = (amount: number, seller: string) => {
+// Export for use in payment/confirmation components
+export const generateUPIQR = (amount: number, seller: string) => {
   const upiId = `${seller}@paytm`;
   const upiString = `upi://pay?pa=${upiId}&pn=${seller}&am=${amount}&cu=INR&tn=Mess Payment`;
   return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiString)}`;

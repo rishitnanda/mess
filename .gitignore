@@ -17,3 +17,5 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+/src/lib/supabase.txt

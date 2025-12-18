@@ -1,144 +1,16 @@
 // src/lib/supabase.ts
 import { createClient } from '@supabase/supabase-js'
 
-// ISSUE 1: Using NEXT_PUBLIC_ prefix - this is for Next.js
-// For Vite (React), use VITE_ prefix instead
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Fix for Vite environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string || ''
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string || ''
 
-// ISSUE 2: Need to check if credentials exist
+// Check if credentials exist
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase credentials. Please check your .env file.')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// Database Schema Setup (SQL)
-// Run these in Supabase SQL Editor:
-
-/*
--- Users table (extends Supabase auth.users)
-CREATE TABLE public.profiles (
-  id UUID REFERENCES auth.users PRIMARY KEY,
-  name TEXT,
-  email TEXT,
-  phone TEXT,
-  mess_qr TEXT,
-  profile_pic TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Settings table
-CREATE TABLE public.user_settings (
-  user_id UUID REFERENCES auth.users PRIMARY KEY,
-  notify_listing_sold BOOLEAN DEFAULT true,
-  notify_listing_resumed BOOLEAN DEFAULT true,
-  notify_auction_won BOOLEAN DEFAULT true,
-  notify_auction_lost BOOLEAN DEFAULT false,
-  notify_lost_auction_resumes BOOLEAN DEFAULT true,
-  notify_price_reduced BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Listings table
-CREATE TABLE public.listings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  seller_id UUID REFERENCES auth.users NOT NULL,
-  mess TEXT NOT NULL,
-  meal_time TEXT NOT NULL,
-  date DATE NOT NULL,
-  is_auction BOOLEAN DEFAULT false,
-  target_price DECIMAL(10,2) NOT NULL,
-  current_price DECIMAL(10,2) NOT NULL,
-  price_drop_amount DECIMAL(10,2) DEFAULT 0,
-  price_drop_interval INTEGER DEFAULT 5,
-  auction_duration INTEGER DEFAULT 3,
-  longer_bids BOOLEAN DEFAULT false,
-  status TEXT DEFAULT 'active',
-  end_time TIMESTAMP NOT NULL,
-  drop_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Bids table
-CREATE TABLE public.bids (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  listing_id UUID REFERENCES public.listings NOT NULL,
-  bidder_id UUID REFERENCES auth.users NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Notifications table
-CREATE TABLE public.notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users NOT NULL,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  read BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Payments table
-CREATE TABLE public.payments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  listing_id UUID REFERENCES public.listings NOT NULL,
-  buyer_id UUID REFERENCES auth.users NOT NULL,
-  seller_id UUID REFERENCES auth.users NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
-  status TEXT DEFAULT 'pending',
-  upi_transaction_id TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP
-);
-
--- Indexes for performance
-CREATE INDEX idx_listings_seller ON public.listings(seller_id);
-CREATE INDEX idx_listings_status ON public.listings(status);
-CREATE INDEX idx_listings_end_time ON public.listings(end_time);
-CREATE INDEX idx_bids_listing ON public.bids(listing_id);
-CREATE INDEX idx_bids_bidder ON public.bids(bidder_id);
-CREATE INDEX idx_notifications_user ON public.notifications(user_id);
-
--- Row Level Security (RLS) Policies
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.listings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bids ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
-
--- Profiles policies
-CREATE POLICY "Users can view all profiles" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Settings policies
-CREATE POLICY "Users can view own settings" ON public.user_settings FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own settings" ON public.user_settings FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own settings" ON public.user_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Listings policies
-CREATE POLICY "Anyone can view active listings" ON public.listings FOR SELECT USING (status = 'active');
-CREATE POLICY "Users can create listings" ON public.listings FOR INSERT WITH CHECK (auth.uid() = seller_id);
-CREATE POLICY "Users can update own listings" ON public.listings FOR UPDATE USING (auth.uid() = seller_id);
-
--- Bids policies
-CREATE POLICY "Users can view bids on listings" ON public.bids FOR SELECT USING (true);
-CREATE POLICY "Users can create bids" ON public.bids FOR INSERT WITH CHECK (auth.uid() = bidder_id);
-CREATE POLICY "Users can delete own bids" ON public.bids FOR DELETE USING (auth.uid() = bidder_id);
-
--- Notifications policies
-CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
-
--- Payments policies
-CREATE POLICY "Users can view own payments" ON public.payments FOR SELECT USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
-CREATE POLICY "Users can create payments" ON public.payments FOR INSERT WITH CHECK (auth.uid() = buyer_id);
-*/
 
 // Type definitions
 interface Profile {
@@ -219,7 +91,7 @@ export const api = {
   async uploadProfilePic(userId: string, file: File) {
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}.${fileExt}`
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('profile-pics')
       .upload(fileName, file, { upsert: true })
     
