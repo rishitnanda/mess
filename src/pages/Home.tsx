@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Clock, Users, IndianRupee, X, Menu, Home as HomeIcon, ListPlus, Settings, User, QrCode, Trash2, Bell } from 'lucide-react';
 
 // Export constants for use in other components
@@ -191,7 +191,6 @@ export default function Home({
   onShowProfile, 
   onShowSettings 
 }: HomeProps) {
-  // FIXED: Removed duplicate darkMode and currentUser states
   const [listings, setListings] = useState<Listing[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
