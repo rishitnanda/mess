@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, Users, IndianRupee, X, Menu, Home as HomeIcon, ListPlus, Settings, User, QrCode, Trash2, Bell } from 'lucide-react';
+import NotificationPanel from '../components/NotificationPanel';
+import { api } from '../lib/supabase';
 
 // Export constants for use in other components
 export const MESS_OPTIONS = ['Mess 1 - Veg', 'Mess 1 - Non-Veg', 'Mess 2', 'Mess 3'];
@@ -194,6 +196,34 @@ export default function Home({
   const [listings, setListings] = useState<Listing[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Load unread notification count
+  useEffect(() => {
+    loadUnreadCount();
+    // Set up real-time subscription for new notifications
+    const subscription = api.subscribeToNotifications(currentUser.id, (payload) => {
+      if (payload.eventType === 'INSERT') {
+        loadUnreadCount();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [currentUser.id]);
+
+  const loadUnreadCount = async () => {
+    try {
+      const { data } = await api.getNotifications(currentUser.id);
+      if (data) {
+        setUnreadCount(data.filter(n => !n.read).length);
+      }
+    } catch (error) {
+      console.error('Error loading notification count:', error);
+    }
+  };
 
   const addNotif = (title: string, msg: string) => {
     const id = Date.now();
@@ -240,6 +270,19 @@ export default function Home({
             <h1 className="text-xl font-bold">Mess Marketplace</h1>
           </div>
           <div className="flex gap-3">
+            {/* Notification Bell */}
+            <button 
+              onClick={() => setShowNotificationPanel(true)}
+              className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            >
+              <Bell className="w-6 h-6" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            
             <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
               <QrCode className="w-5 h-5" />Get QR
             </button>
@@ -252,6 +295,18 @@ export default function Home({
         onDismiss={(id) => setNotifications(p => p.filter(n => n.id !== id))} 
         darkMode={darkMode} 
       />
+
+      {/* Notification Panel */}
+      {showNotificationPanel && (
+        <NotificationPanel
+          userId={currentUser.id}
+          darkMode={darkMode}
+          onClose={() => {
+            setShowNotificationPanel(false);
+            loadUnreadCount(); // Refresh count when panel closes
+          }}
+        />
+      )}
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         {listings.filter(l => l.status !== 'unlisted').length === 0 ? (

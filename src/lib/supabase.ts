@@ -244,6 +244,16 @@ export const api = {
     return { data, error }
   },
 
+  async deleteNotification(notificationId: string) {
+    const { data, error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId)
+      .select()
+      .single()
+    return { data, error }
+  },
+
   // Real-time subscriptions
   subscribeToListings(callback: (payload: any) => void) {
     return supabase
