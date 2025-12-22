@@ -1,0 +1,262 @@
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Users table (extends Supabase auth.users)
+CREATE TABLE public.profiles (
+  id UUID REFERENCES auth.users PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  phone TEXT,
+  mess_qr TEXT, -- Should be validated against actual mess QR codes
+  profile_pic TEXT,
+  rating DECIMAL(3,2) DEFAULT 0,
+  total_ratings INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Settings table
+CREATE TABLE public.user_settings (
+  user_id UUID REFERENCES auth.users PRIMARY KEY,
+  notify_listing_sold BOOLEAN DEFAULT true,
+  notify_listing_resumed BOOLEAN DEFAULT true,
+  notify_auction_won BOOLEAN DEFAULT true,
+  notify_auction_lost BOOLEAN DEFAULT false,
+  notify_lost_auction_resumes BOOLEAN DEFAULT true,
+  notify_price_reduced BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Listings table with better constraints
+CREATE TABLE public.listings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  seller_id UUID REFERENCES auth.users NOT NULL,
+  mess TEXT NOT NULL CHECK (mess IN ('Mess 1 - Veg', 'Mess 1 - Non-Veg', 'Mess 2', 'Mess 3')),
+  meal_time TEXT NOT NULL CHECK (meal_time IN ('Breakfast', 'Lunch', 'Snacks', 'Dinner')),
+  date DATE NOT NULL CHECK (date >= CURRENT_DATE),
+  is_auction BOOLEAN DEFAULT false,
+  target_price DECIMAL(10,2) NOT NULL CHECK (target_price > 0),
+  current_price DECIMAL(10,2) NOT NULL CHECK (current_price > 0),
+  price_drop_amount DECIMAL(10,2) DEFAULT 0 CHECK (price_drop_amount >= 0),
+  price_drop_interval INTEGER DEFAULT 5 CHECK (price_drop_interval > 0),
+  auction_duration INTEGER DEFAULT 3 CHECK (auction_duration > 0),
+  longer_bids BOOLEAN DEFAULT false,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'sold', 'expired', 'cancelled')),
+  end_time TIMESTAMPTZ NOT NULL,
+  drop_count INTEGER DEFAULT 0 CHECK (drop_count >= 0),
+  winner_id UUID REFERENCES auth.users,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Prevent duplicate listings for same meal
+  UNIQUE(seller_id, mess, meal_time, date)
+);
+
+-- Bids table with better constraints
+CREATE TABLE public.bids (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  listing_id UUID REFERENCES public.listings ON DELETE CASCADE NOT NULL,
+  bidder_id UUID REFERENCES auth.users NOT NULL,
+  amount DECIMAL(10,2) NOT NULL CHECK (amount > 0),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Prevent seller from bidding on own listing
+  CHECK (bidder_id != (SELECT seller_id FROM listings WHERE id = listing_id)),
+  
+  -- Prevent duplicate bids with same amount from same user
+  UNIQUE(listing_id, bidder_id, amount)
+);
+
+-- Notifications table
+CREATE TABLE public.notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT CHECK (type IN ('listing_sold', 'auction_won', 'auction_lost', 'price_reduced', 'listing_resumed', 'system')),
+  read BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Payments table with better tracking
+CREATE TABLE public.payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  listing_id UUID REFERENCES public.listings ON DELETE SET NULL,
+  buyer_id UUID REFERENCES auth.users NOT NULL,
+  seller_id UUID REFERENCES auth.users NOT NULL,
+  amount DECIMAL(10,2) NOT NULL CHECK (amount > 0),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+  upi_transaction_id TEXT,
+  payment_method TEXT DEFAULT 'upi',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  
+  CHECK (buyer_id != seller_id)
+);
+
+-- Ratings table (new)
+CREATE TABLE public.ratings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  payment_id UUID REFERENCES public.payments UNIQUE NOT NULL,
+  rater_id UUID REFERENCES auth.users NOT NULL,
+  rated_user_id UUID REFERENCES auth.users NOT NULL,
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5) NOT NULL,
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CHECK (rater_id != rated_user_id)
+);
+
+-- Indexes for performance
+CREATE INDEX idx_listings_seller ON public.listings(seller_id);
+CREATE INDEX idx_listings_status ON public.listings(status);
+CREATE INDEX idx_listings_end_time ON public.listings(end_time);
+CREATE INDEX idx_listings_date ON public.listings(date);
+CREATE INDEX idx_listings_mess_meal ON public.listings(mess, meal_time);
+CREATE INDEX idx_bids_listing ON public.bids(listing_id);
+CREATE INDEX idx_bids_bidder ON public.bids(bidder_id);
+CREATE INDEX idx_notifications_user ON public.notifications(user_id);
+CREATE INDEX idx_notifications_unread ON public.notifications(user_id) WHERE read = false;
+CREATE INDEX idx_payments_buyer ON public.payments(buyer_id);
+CREATE INDEX idx_payments_seller ON public.payments(seller_id);
+CREATE INDEX idx_payments_status ON public.payments(status);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bids ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ratings ENABLE ROW LEVEL SECURITY;
+
+-- Profiles policies
+CREATE POLICY "Users can view all profiles" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Settings policies
+CREATE POLICY "Users can view own settings" ON public.user_settings FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own settings" ON public.user_settings FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own settings" ON public.user_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Listings policies
+CREATE POLICY "Anyone can view active listings" ON public.listings FOR SELECT USING (status IN ('active', 'sold'));
+CREATE POLICY "Users can create listings" ON public.listings FOR INSERT WITH CHECK (auth.uid() = seller_id);
+CREATE POLICY "Users can update own listings" ON public.listings FOR UPDATE USING (auth.uid() = seller_id);
+
+-- Bids policies
+CREATE POLICY "Users can view bids on listings" ON public.bids FOR SELECT USING (true);
+CREATE POLICY "Users can create bids" ON public.bids FOR INSERT WITH CHECK (auth.uid() = bidder_id);
+CREATE POLICY "Users can delete own bids" ON public.bids FOR DELETE USING (auth.uid() = bidder_id);
+
+-- Notifications policies
+CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
+
+-- Payments policies
+CREATE POLICY "Users can view own payments" ON public.payments FOR SELECT USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
+CREATE POLICY "Users can create payments" ON public.payments FOR INSERT WITH CHECK (auth.uid() = buyer_id);
+CREATE POLICY "Users can update own payments" ON public.payments FOR UPDATE USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
+
+-- Ratings policies
+CREATE POLICY "Users can view ratings" ON public.ratings FOR SELECT USING (true);
+CREATE POLICY "Users can create ratings" ON public.ratings FOR INSERT WITH CHECK (auth.uid() = rater_id);
+
+-- Trigger to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON public.user_settings
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_listings_updated_at BEFORE UPDATE ON public.listings
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to automatically expire listings
+CREATE OR REPLACE FUNCTION expire_listings()
+RETURNS void AS $$
+BEGIN
+  UPDATE public.listings
+  SET status = 'expired'
+  WHERE status = 'active' 
+    AND end_time < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to handle listing completion (called when auction/sale ends)
+CREATE OR REPLACE FUNCTION complete_listing(listing_uuid UUID)
+RETURNS void AS $$
+DECLARE
+  listing_record RECORD;
+  highest_bid RECORD;
+BEGIN
+  -- Get listing details
+  SELECT * INTO listing_record FROM public.listings WHERE id = listing_uuid;
+  
+  -- Get highest bid
+  SELECT * INTO highest_bid 
+  FROM public.bids 
+  WHERE listing_id = listing_uuid 
+  ORDER BY amount DESC 
+  LIMIT 1;
+  
+  -- If there's a highest bid, mark as sold
+  IF highest_bid IS NOT NULL THEN
+    UPDATE public.listings 
+    SET status = 'sold', winner_id = highest_bid.bidder_id 
+    WHERE id = listing_uuid;
+    
+    -- Create payment record
+    INSERT INTO public.payments (listing_id, buyer_id, seller_id, amount)
+    VALUES (listing_uuid, highest_bid.bidder_id, listing_record.seller_id, highest_bid.amount);
+    
+    -- Notify winner
+    INSERT INTO public.notifications (user_id, title, message, type)
+    VALUES (
+      highest_bid.bidder_id,
+      'Auction Won!',
+      'You won ' || listing_record.mess || ' for ₹' || highest_bid.amount,
+      'auction_won'
+    );
+    
+    -- Notify seller
+    INSERT INTO public.notifications (user_id, title, message, type)
+    VALUES (
+      listing_record.seller_id,
+      'Listing Sold!',
+      'Your ' || listing_record.mess || ' sold for ₹' || highest_bid.amount,
+      'listing_sold'
+    );
+  ELSE
+    -- No bids, mark as expired
+    UPDATE public.listings SET status = 'expired' WHERE id = listing_uuid;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update user rating when new rating is added
+CREATE OR REPLACE FUNCTION update_user_rating()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE public.profiles
+  SET 
+    total_ratings = total_ratings + 1,
+    rating = ((rating * total_ratings) + NEW.rating) / (total_ratings + 1)
+  WHERE id = NEW.rated_user_id;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_rating_trigger AFTER INSERT ON public.ratings
+    FOR EACH ROW EXECUTE FUNCTION update_user_rating();
