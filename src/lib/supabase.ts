@@ -20,6 +20,8 @@ interface Profile {
   phone: string | null
   mess_qr: string | null
   profile_pic: string | null
+  is_admin?: boolean
+  admin_role?: string | null
   created_at: string
   updated_at: string
 }
@@ -64,6 +66,47 @@ interface Bid {
   bidder_id: string
   amount: number
   created_at: string
+}
+
+interface Rating {
+  id: string
+  rater_id: string
+  rated_user_id: string
+  listing_id: string
+  rating: number
+  review: string
+  transaction_type: 'buyer' | 'seller'
+  created_at: string
+  updated_at: string
+}
+
+interface Report {
+  id: string
+  reporter_id: string
+  reported_user_id: string
+  listing_id: string | null
+  reason: string
+  description: string
+  evidence_urls: string[]
+  status: string
+  admin_notes: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface UserStats {
+  user_id: string
+  avg_rating: number
+  total_ratings: number
+  total_sales: number
+  total_purchases: number
+  reports_count: number
+  is_banned: boolean
+  ban_reason: string | null
+  banned_at: string | null
+  updated_at: string
 }
 
 // API Functions
@@ -203,7 +246,6 @@ export const api = {
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
-      .eq('read', false)
       .order('created_at', { ascending: false })
     return { data, error }
   },
@@ -212,6 +254,16 @@ export const api = {
     const { data, error } = await supabase
       .from('notifications')
       .update({ read: true })
+      .eq('id', notificationId)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async deleteNotification(notificationId: string) {
+    const { data, error } = await supabase
+      .from('notifications')
+      .delete()
       .eq('id', notificationId)
       .select()
       .single()
@@ -244,14 +296,168 @@ export const api = {
     return { data, error }
   },
 
-  async deleteNotification(notificationId: string) {
+  // Ratings
+  async createRating(raterId: string, ratedUserId: string, listingId: string, rating: number, review: string, transactionType: 'buyer' | 'seller') {
     const { data, error } = await supabase
-      .from('notifications')
-      .delete()
-      .eq('id', notificationId)
+      .from('ratings')
+      .insert([{ 
+        rater_id: raterId, 
+        rated_user_id: ratedUserId, 
+        listing_id: listingId, 
+        rating, 
+        review, 
+        transaction_type: transactionType 
+      }])
       .select()
       .single()
     return { data, error }
+  },
+
+  async getUserRatings(userId: string) {
+    const { data, error } = await supabase
+      .from('ratings')
+      .select('*, profiles!rater_id(*)')
+      .eq('rated_user_id', userId)
+      .order('created_at', { ascending: false })
+    return { data, error }
+  },
+
+  async getUserStats(userId: string) {
+    const { data, error } = await supabase
+      .from('user_stats')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+    return { data, error }
+  },
+
+  async canRateUser(raterId: string, ratedUserId: string, listingId: string) {
+    const { data, error } = await supabase
+      .from('ratings')
+      .select('id')
+      .eq('rater_id', raterId)
+      .eq('rated_user_id', ratedUserId)
+      .eq('listing_id', listingId)
+      .single()
+    return { canRate: !data, error }
+  },
+
+  // Reports
+  async createReport(reporterId: string, reportedUserId: string, listingId: string | null, reason: string, description: string, evidenceUrls: string[] = []) {
+    const { data, error } = await supabase
+      .from('reports')
+      .insert([{ 
+        reporter_id: reporterId, 
+        reported_user_id: reportedUserId, 
+        listing_id: listingId,
+        reason, 
+        description,
+        evidence_urls: evidenceUrls
+      }])
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async getReports(status?: string) {
+    let query = supabase
+      .from('reports')
+      .select('*, reporter:profiles!reporter_id(*), reported_user:profiles!reported_user_id(*), listing:listings(*)')
+      .order('created_at', { ascending: false })
+    
+    if (status) query = query.eq('status', status)
+    
+    const { data, error } = await query
+    return { data, error }
+  },
+
+  async updateReportStatus(reportId: string, status: string, adminId: string, adminNotes?: string) {
+    const updates: any = { 
+      status, 
+      resolved_by: adminId,
+      updated_at: new Date().toISOString()
+    }
+    
+    if (status === 'resolved' || status === 'dismissed') {
+      updates.resolved_at = new Date().toISOString()
+    }
+    
+    if (adminNotes) {
+      updates.admin_notes = adminNotes
+    }
+    
+    const { data, error } = await supabase
+      .from('reports')
+      .update(updates)
+      .eq('id', reportId)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async banUser(userId: string, reason: string, adminId: string) {
+    const { data, error } = await supabase
+      .from('user_stats')
+      .upsert({ 
+        user_id: userId, 
+        is_banned: true, 
+        ban_reason: reason,
+        banned_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+    
+    // Notify user
+    if (!error) {
+      await this.createNotification(userId, 'Account Suspended', `Your account has been suspended. Reason: ${reason}`)
+    }
+    
+    return { data, error }
+  },
+
+  async unbanUser(userId: string) {
+    const { data, error } = await supabase
+      .from('user_stats')
+      .update({ 
+        is_banned: false, 
+        ban_reason: null,
+        banned_at: null
+      })
+      .eq('user_id', userId)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  // Admin functions
+  async getAllUsers(page: number = 1, limit: number = 50) {
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, user_stats(*)')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    return { data, error }
+  },
+
+  async getSystemStats() {
+    const [users, listings, reports, payments] = await Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
+      supabase.from('listings').select('id, status', { count: 'exact' }),
+      supabase.from('reports').select('id, status', { count: 'exact' }),
+      supabase.from('payments').select('id, status, amount')
+    ])
+    
+    return {
+      totalUsers: users.count || 0,
+      totalListings: listings.count || 0,
+      activeListings: listings.data?.filter(l => l.status === 'active').length || 0,
+      pendingReports: reports.data?.filter(r => r.status === 'pending').length || 0,
+      totalReports: reports.count || 0,
+      totalRevenue: payments.data?.reduce((sum, p) => p.status === 'completed' ? sum + p.amount : sum, 0) || 0
+    }
   },
 
   // Real-time subscriptions
@@ -283,6 +489,13 @@ export const api = {
         table: 'notifications',
         filter: `user_id=eq.${userId}`
       }, callback)
+      .subscribe()
+  },
+
+  subscribeToReports(callback: (payload: any) => void) {
+    return supabase
+      .channel('reports-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, callback)
       .subscribe()
   }
 }
