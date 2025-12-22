@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Clock, Users, IndianRupee, X, Menu, Home as HomeIcon, ListPlus, Settings, User, QrCode, Trash2, Bell } from 'lucide-react';
+import { Clock, Users, IndianRupee, X, Menu, Home as HomeIcon, ListPlus, Settings, User, QrCode, Trash2, Bell, Star, AlertTriangle, Shield, Eye } from 'lucide-react';
 import NotificationPanel from '../components/NotificationPanel';
+import RatingModal from '../components/RatingModal';
+import ReportModal from '../components/ReportModal';
+import UserRatingDisplay from '../components/UserRatingDisplay';
+import AdminPanel from '../components/AdminPanel';
 import { api } from '../lib/supabase';
 
 // Export constants for use in other components
@@ -32,6 +36,7 @@ interface Listing {
   endTime: number;
   createdAt: number;
   sellerName: string;
+  sellerId: string;
 }
 
 interface Notification {
@@ -42,9 +47,22 @@ interface Notification {
 
 interface HomeProps {
   darkMode: boolean;
-  currentUser: { id: string; name: string; email: string };
+  currentUser: { id: string; name: string; email: string; is_admin?: boolean };
   onShowProfile: () => void;
   onShowSettings: () => void;
+}
+
+interface RatingTarget {
+  userId: string;
+  userName: string;
+  listingId: string;
+  transactionType: 'buyer' | 'seller';
+}
+
+interface ReportTarget {
+  userId: string;
+  userName: string;
+  listingId?: string;
 }
 
 // Utility Functions
@@ -88,21 +106,35 @@ const NotificationToast: React.FC<NotificationToastProps> = ({ notifications, on
 // Listing Card Component
 interface ListingCardProps {
   listing: Listing;
-  currentUserName: string;
+  currentUser: { id: string; name: string };
   darkMode: boolean;
   onPlaceBid: (id: number, amount: number) => void;
   onWithdraw: (id: number) => void;
   onUnlist: (id: number) => void;
+  onRateUser: (target: RatingTarget) => void;
+  onReportUser: (target: ReportTarget) => void;
+  onViewRating: (userId: string) => void;
 }
 
-const ListingCard: React.FC<ListingCardProps> = ({ listing, currentUserName, darkMode, onPlaceBid, onWithdraw, onUnlist }) => {
+const ListingCard: React.FC<ListingCardProps> = ({ 
+  listing, 
+  currentUser, 
+  darkMode, 
+  onPlaceBid, 
+  onWithdraw, 
+  onUnlist,
+  onRateUser,
+  onReportUser,
+  onViewRating
+}) => {
   const [timeRemaining, setTimeRemaining] = useState(getTimeRemaining(listing.endTime));
   const [bidAmount, setBidAmount] = useState('');
   const [showInput, setShowInput] = useState(false);
   
-  const userBids = listing.bids.filter(b => b.bidder === currentUserName);
-  const isSeller = listing.sellerName === currentUserName;
+  const userBids = listing.bids.filter(b => b.bidder === currentUser.name);
+  const isSeller = listing.sellerName === currentUser.name;
   const topBid = listing.bids.length > 0 ? Math.max(...listing.bids.map(b => b.amount)) : 0;
+  const isTopBidder = userBids.length > 0 && Math.max(...userBids.map(b => b.amount)) === topBid;
 
   useEffect(() => {
     const timer = setInterval(() => setTimeRemaining(getTimeRemaining(listing.endTime)), 1000);
@@ -121,6 +153,10 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, currentUserName, dar
     setShowInput(false);
   };
 
+  // Show rating button if transaction is complete and user was involved
+  const canRateSeller = listing.status === 'sold' && !isSeller && isTopBidder;
+  const canRateBuyer = listing.status === 'sold' && isSeller;
+
   return (
     <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-lg p-4 border-2`}>
       <div className="flex justify-between mb-3">
@@ -129,9 +165,16 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, currentUserName, dar
           <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{listing.mealTime}</p>
           <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{new Date(listing.date).toLocaleDateString()}</p>
         </div>
-        <span className={`text-xs px-2 py-1 rounded h-fit ${listing.isAuction ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-          {listing.isAuction ? 'Auction' : 'Instant'}
-        </span>
+        <div className="flex flex-col gap-1 items-end">
+          <span className={`text-xs px-2 py-1 rounded ${listing.isAuction ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+            {listing.isAuction ? 'Auction' : 'Instant'}
+          </span>
+          {listing.status === 'sold' && (
+            <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+              Sold
+            </span>
+          )}
+        </div>
       </div>
 
       <div className={`${darkMode ? 'bg-blue-900/30' : 'bg-blue-50'} rounded-lg p-3 mb-3`}>
@@ -140,6 +183,25 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, currentUserName, dar
         </p>
         {topBid > 0 && <p className="text-sm mt-1">Top Bid: ₹{topBid}</p>}
       </div>
+
+      {/* Seller Rating Display */}
+      {!isSeller && (
+        <div className="mb-3 pb-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Seller:</span>
+              <span className="font-semibold">{listing.sellerName}</span>
+            </div>
+            <button
+              onClick={() => onViewRating(listing.sellerId)}
+              className="flex items-center gap-1 text-blue-500 hover:text-blue-600 text-xs"
+            >
+              <Eye className="w-3 h-3" />
+              View Rating
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-3">
         <span className={`text-sm ${darkMode ? 'bg-gray-700' : 'bg-gray-100'} px-3 py-1 rounded flex items-center gap-1`}>
@@ -153,35 +215,88 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, currentUserName, dar
       {userBids.length > 0 && (
         <div className={`mb-3 p-2 ${darkMode ? 'bg-yellow-900/30' : 'bg-yellow-50'} rounded border text-xs`}>
           <p className="font-medium mb-1">Your bids: {userBids.map(b => `₹${b.amount}`).join(', ')}</p>
-          <button onClick={() => onWithdraw(listing.id)} className="text-red-600 underline">Withdraw all</button>
+          {isTopBidder && <p className="text-green-600 dark:text-green-400 font-semibold">🏆 You're the top bidder!</p>}
+          <button onClick={() => onWithdraw(listing.id)} className="text-red-600 underline mt-1">Withdraw all</button>
         </div>
       )}
 
-      {listing.status === 'active' && !isSeller && (
-        !showInput ? (
-          <button onClick={() => setShowInput(true)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold">
-            Place Bid
-          </button>
-        ) : (
-          <div className="flex gap-2">
-            <input type="number" value={bidAmount} onChange={(e) => setBidAmount(e.target.value)}
-              placeholder={listing.isAuction ? `Min: ₹${listing.currentPrice}` : 'Any amount'}
-              className={`flex-1 border ${darkMode ? 'bg-gray-700 border-gray-600' : 'border-gray-300'} rounded-lg px-3 py-2`} />
-            <button onClick={handleBid} className="bg-blue-500 text-white px-4 py-2 rounded-lg">Bid</button>
-            <button onClick={() => setShowInput(false)} className={`${darkMode ? 'bg-gray-700' : 'bg-gray-200'} px-3 py-2 rounded-lg`}>
-              <X className="w-5 h-5" />
+      {/* Action Buttons */}
+      <div className="space-y-2">
+        {listing.status === 'active' && !isSeller && (
+          !showInput ? (
+            <button onClick={() => setShowInput(true)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold">
+              Place Bid
             </button>
-          </div>
-        )
-      )}
+          ) : (
+            <div className="flex gap-2">
+              <input type="number" value={bidAmount} onChange={(e) => setBidAmount(e.target.value)}
+                placeholder={listing.isAuction ? `Min: ₹${listing.currentPrice}` : 'Any amount'}
+                className={`flex-1 border ${darkMode ? 'bg-gray-700 border-gray-600' : 'border-gray-300'} rounded-lg px-3 py-2`} />
+              <button onClick={handleBid} className="bg-blue-500 text-white px-4 py-2 rounded-lg">Bid</button>
+              <button onClick={() => setShowInput(false)} className={`${darkMode ? 'bg-gray-700' : 'bg-gray-200'} px-3 py-2 rounded-lg`}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )
+        )}
 
-      {isSeller && listing.status === 'active' && (
-        <button onClick={() => onUnlist(listing.id)} className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center gap-2">
-          <Trash2 className="w-4 h-4" />Unlist
-        </button>
-      )}
+        {isSeller && listing.status === 'active' && (
+          <button onClick={() => onUnlist(listing.id)} className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center gap-2">
+            <Trash2 className="w-4 h-4" />Unlist
+          </button>
+        )}
 
-      <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-3`}>Seller: {listing.sellerName}</p>
+        {/* Rating Buttons for Completed Transactions */}
+        {canRateSeller && (
+          <button 
+            onClick={() => onRateUser({
+              userId: listing.sellerId,
+              userName: listing.sellerName,
+              listingId: listing.id.toString(),
+              transactionType: 'seller'
+            })}
+            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
+          >
+            <Star className="w-4 h-4" />
+            Rate Seller
+          </button>
+        )}
+
+        {canRateBuyer && topBid > 0 && (
+          <button 
+            onClick={() => {
+              const topBidder = listing.bids.find(b => b.amount === topBid);
+              if (topBidder) {
+                onRateUser({
+                  userId: 'buyer-id', // You'll need to get actual buyer ID
+                  userName: topBidder.bidder,
+                  listingId: listing.id.toString(),
+                  transactionType: 'buyer'
+                });
+              }
+            }}
+            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded-lg font-semibold flex items-center justify-center gap-2"
+          >
+            <Star className="w-4 h-4" />
+            Rate Buyer
+          </button>
+        )}
+
+        {/* Report Button (always available for non-sellers) */}
+        {!isSeller && (
+          <button
+            onClick={() => onReportUser({
+              userId: listing.sellerId,
+              userName: listing.sellerName,
+              listingId: listing.id.toString()
+            })}
+            className={`w-full ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} py-2 rounded-lg font-medium flex items-center justify-center gap-2 text-red-600 dark:text-red-400`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Report Issue
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -199,10 +314,18 @@ export default function Home({
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // New states for ratings and reports
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingTarget, setRatingTarget] = useState<RatingTarget | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [showUserRating, setShowUserRating] = useState(false);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+
   // Load unread notification count
   useEffect(() => {
     loadUnreadCount();
-    // Set up real-time subscription for new notifications
     const subscription = api.subscribeToNotifications(currentUser.id, (payload) => {
       if (payload.eventType === 'INSERT') {
         loadUnreadCount();
@@ -259,6 +382,59 @@ export default function Home({
     }
   };
 
+  const handleRateUser = (target: RatingTarget) => {
+    setRatingTarget(target);
+    setShowRatingModal(true);
+  };
+
+  const handleReportUser = (target: ReportTarget) => {
+    setReportTarget(target);
+    setShowReportModal(true);
+  };
+
+  const handleViewRating = (userId: string) => {
+    setViewingUserId(userId);
+    setShowUserRating(true);
+  };
+
+  const submitRating = async (rating: number, review: string) => {
+    if (!ratingTarget) return;
+
+    try {
+      await api.createRating(
+        currentUser.id,
+        ratingTarget.userId,
+        ratingTarget.listingId,
+        rating,
+        review,
+        ratingTarget.transactionType
+      );
+      addNotif('Rating Submitted', `You rated ${ratingTarget.userName} ${rating} stars`);
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      throw error;
+    }
+  };
+
+  const submitReport = async (reason: string, description: string, evidenceUrls: string[]) => {
+    if (!reportTarget) return;
+
+    try {
+      await api.createReport(
+        currentUser.id,
+        reportTarget.userId,
+        reportTarget.listingId || null,
+        reason,
+        description,
+        evidenceUrls
+      );
+      addNotif('Report Submitted', 'Our team will review your report');
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      throw error;
+    }
+  };
+
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50'}`}>
       <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b`}>
@@ -270,6 +446,17 @@ export default function Home({
             <h1 className="text-xl font-bold">Mess Marketplace</h1>
           </div>
           <div className="flex gap-3">
+            {/* Admin Panel Button (only for admins) */}
+            {currentUser.is_admin && (
+              <button 
+                onClick={() => setShowAdminPanel(true)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg relative"
+                title="Admin Panel"
+              >
+                <Shield className="w-6 h-6 text-purple-500" />
+              </button>
+            )}
+
             {/* Notification Bell */}
             <button 
               onClick={() => setShowNotificationPanel(true)}
@@ -296,15 +483,62 @@ export default function Home({
         darkMode={darkMode} 
       />
 
-      {/* Notification Panel */}
+      {/* Modals */}
       {showNotificationPanel && (
         <NotificationPanel
           userId={currentUser.id}
           darkMode={darkMode}
           onClose={() => {
             setShowNotificationPanel(false);
-            loadUnreadCount(); // Refresh count when panel closes
+            loadUnreadCount();
           }}
+        />
+      )}
+
+      {showRatingModal && ratingTarget && (
+        <RatingModal
+          darkMode={darkMode}
+          ratedUserName={ratingTarget.userName}
+          transactionType={ratingTarget.transactionType}
+          onClose={() => {
+            setShowRatingModal(false);
+            setRatingTarget(null);
+          }}
+          onSubmit={submitRating}
+        />
+      )}
+
+      {showReportModal && reportTarget && (
+        <ReportModal
+          darkMode={darkMode}
+          reportedUserName={reportTarget.userName}
+          reportedUserId={reportTarget.userId}
+          listingId={reportTarget.listingId}
+          onClose={() => {
+            setShowReportModal(false);
+            setReportTarget(null);
+          }}
+          onSubmit={submitReport}
+        />
+      )}
+
+      {showUserRating && viewingUserId && (
+        <UserRatingDisplay
+          userId={viewingUserId}
+          darkMode={darkMode}
+          compact={false}
+          onClose={() => {
+            setShowUserRating(false);
+            setViewingUserId(null);
+          }}
+        />
+      )}
+
+      {showAdminPanel && (
+        <AdminPanel
+          darkMode={darkMode}
+          currentUserId={currentUser.id}
+          onClose={() => setShowAdminPanel(false)}
         />
       )}
 
@@ -321,11 +555,14 @@ export default function Home({
               <ListingCard 
                 key={l.id} 
                 listing={l} 
-                currentUserName={currentUser.name} 
+                currentUser={currentUser}
                 darkMode={darkMode}
                 onPlaceBid={placeBid} 
                 onWithdraw={withdrawBid} 
-                onUnlist={unlistListing} 
+                onUnlist={unlistListing}
+                onRateUser={handleRateUser}
+                onReportUser={handleReportUser}
+                onViewRating={handleViewRating}
               />
             ))}
           </div>
@@ -374,6 +611,17 @@ export default function Home({
               >
                 <Settings className="w-5 h-5" />Settings
               </button>
+              {currentUser.is_admin && (
+                <button 
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowAdminPanel(true);
+                  }} 
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-purple-600 dark:text-purple-400 font-semibold"
+                >
+                  <Shield className="w-5 h-5" />Admin Panel
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -381,4 +629,3 @@ export default function Home({
     </div>
   );
 }
-
