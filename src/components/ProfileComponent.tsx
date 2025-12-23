@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { X, Upload, User, Mail, Phone, QrCode, Camera } from 'lucide-react';
 import { api } from '../lib/supabase';
 
-// FIXED: Proper type definitions
 interface ProfileData {
   id?: string;
   name?: string;
@@ -10,6 +9,8 @@ interface ProfileData {
   phone?: string;
   mess_qr?: string;
   profile_pic?: string | null;
+  default_mess_qr?: string | null;
+  default_upi_qr?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -27,6 +28,8 @@ interface ProfileState {
   phone: string;
   messQR: string;
   profilePic: string | null;
+  defaultMessQR: string | null;
+  defaultUpiQR: string | null;
 }
 
 export default function ProfileComponent({ 
@@ -40,7 +43,9 @@ export default function ProfileComponent({
     email: '',
     phone: '',
     messQR: '',
-    profilePic: null
+    profilePic: null,
+    defaultMessQR: null,
+    defaultUpiQR: null
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,6 +53,8 @@ export default function ProfileComponent({
   const [hasActiveItems, setHasActiveItems] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [messQRFile, setMessQRFile] = useState<File | null>(null);
+  const [upiQRFile, setUpiQRFile] = useState<File | null>(null);
 
   useEffect(() => {
     loadProfile();
@@ -63,7 +70,9 @@ export default function ProfileComponent({
         email: data.email || '',
         phone: data.phone || '',
         messQR: data.mess_qr || '',
-        profilePic: data.profile_pic || null
+        profilePic: data.profile_pic || null,
+        defaultMessQR: data.default_mess_qr || null,
+        defaultUpiQR: data.default_upi_qr || null
       });
       setImagePreview(data.profile_pic || null);
     }
@@ -75,7 +84,6 @@ export default function ProfileComponent({
 
   const checkActiveItems = async () => {
     try {
-      // Check if user has active listings or bids
       const { data: listings } = await api.getListings();
       const userListings = listings?.filter(l => l.seller_id === userId && l.status === 'active') || [];
       
@@ -102,17 +110,70 @@ export default function ProfileComponent({
     }
   };
 
+  const handleQRChange = (type: 'mess' | 'upi', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (type === 'mess') {
+        setMessQRFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setProfile(prev => ({ ...prev, defaultMessQR: reader.result as string }));
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setUpiQRFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setProfile(prev => ({ ...prev, defaultUpiQR: reader.result as string }));
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
+  const removeQR = async (type: 'mess' | 'upi') => {
+    if (type === 'mess') {
+      if (profile.defaultMessQR) {
+        await api.deleteQRCode(profile.defaultMessQR);
+      }
+      setProfile(prev => ({ ...prev, defaultMessQR: null }));
+      setMessQRFile(null);
+    } else {
+      if (profile.defaultUpiQR) {
+        await api.deleteQRCode(profile.defaultUpiQR);
+      }
+      setProfile(prev => ({ ...prev, defaultUpiQR: null }));
+      setUpiQRFile(null);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     
     try {
       let profilePicUrl = profile.profilePic;
+      let messQRUrl = profile.defaultMessQR;
+      let upiQRUrl = profile.defaultUpiQR;
       
       // Upload profile picture if changed
       if (imageFile) {
         const { data: uploadData, error: uploadError } = await api.uploadProfilePic(userId, imageFile);
         if (uploadError) throw uploadError;
         profilePicUrl = uploadData;
+      }
+
+      // Upload Mess QR if changed
+      if (messQRFile) {
+        const { data: uploadData, error: uploadError } = await api.uploadQRCode(userId, messQRFile, 'mess');
+        if (uploadError) throw uploadError;
+        messQRUrl = uploadData;
+      }
+
+      // Upload UPI QR if changed
+      if (upiQRFile) {
+        const { data: uploadData, error: uploadError } = await api.uploadQRCode(userId, upiQRFile, 'upi');
+        if (uploadError) throw uploadError;
+        upiQRUrl = uploadData;
       }
       
       // Update profile
@@ -121,14 +182,23 @@ export default function ProfileComponent({
         email: profile.email,
         phone: profile.phone,
         mess_qr: profile.messQR,
-        profile_pic: profilePicUrl || undefined
+        profile_pic: profilePicUrl || undefined,
+        default_mess_qr: messQRUrl || undefined,
+        default_upi_qr: upiQRUrl || undefined
       });
       
       if (error) throw error;
       
-      setProfile(prev => ({ ...prev, profilePic: profilePicUrl }));
+      setProfile(prev => ({ 
+        ...prev, 
+        profilePic: profilePicUrl,
+        defaultMessQR: messQRUrl,
+        defaultUpiQR: upiQRUrl
+      }));
       setEditMode(false);
       setImageFile(null);
+      setMessQRFile(null);
+      setUpiQRFile(null);
       
       if (onUpdate && data) onUpdate(data);
       
@@ -288,6 +358,76 @@ export default function ProfileComponent({
               ℹ️ Required to create listings. You can update this anytime.
             </p>
           </div>
+
+          {/* Default QR Codes Section */}
+          <div className="border-t pt-4 mt-4 border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Default QR Codes (Optional)</h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+              Set default QR codes to use when creating listings. You can override these for individual listings.
+            </p>
+            
+            <div className="space-y-4">
+              {/* Default Mess QR */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Default Mess QR Code
+                  <span className="text-xs text-gray-500 ml-2">(For buyers to receive mess)</span>
+                </label>
+                {profile.defaultMessQR ? (
+                  <div className="flex items-center gap-3">
+                    <img src={profile.defaultMessQR} alt="Mess QR" className="w-24 h-24 object-cover rounded border" />
+                    {editMode && (
+                      <button
+                        onClick={() => removeQR('mess')}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ) : editMode ? (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleQRChange('mess', e)}
+                    className="w-full text-sm"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-500">No default Mess QR set</p>
+                )}
+              </div>
+              
+              {/* Default UPI QR */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Default UPI QR Code
+                  <span className="text-xs text-gray-500 ml-2">(For receiving payment)</span>
+                </label>
+                {profile.defaultUpiQR ? (
+                  <div className="flex items-center gap-3">
+                    <img src={profile.defaultUpiQR} alt="UPI QR" className="w-24 h-24 object-cover rounded border" />
+                    {editMode && (
+                      <button
+                        onClick={() => removeQR('upi')}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ) : editMode ? (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleQRChange('upi', e)}
+                    className="w-full text-sm"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-500">No default UPI QR set</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -320,6 +460,8 @@ export default function ProfileComponent({
                 onClick={() => {
                   setEditMode(false);
                   setImageFile(null);
+                  setMessQRFile(null);
+                  setUpiQRFile(null);
                   setImagePreview(profile.profilePic);
                   loadProfile();
                 }}

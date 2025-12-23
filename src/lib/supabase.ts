@@ -12,7 +12,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Type definitions
 interface Profile {
   id: string
   name: string | null
@@ -20,6 +19,8 @@ interface Profile {
   phone: string | null
   mess_qr: string | null
   profile_pic: string | null
+  default_mess_qr: string | null  // ADD THIS
+  default_upi_qr: string | null   // ADD THIS
   is_admin?: boolean
   admin_role?: string | null
   created_at: string
@@ -54,6 +55,8 @@ interface Listing {
   status: string
   end_time: string
   drop_count: number
+  mess_qr: string | null      // ADD THIS
+  upi_qr: string | null       // ADD THIS
   created_at: string
   updated_at: string
   bids?: Bid[]
@@ -458,6 +461,49 @@ export const api = {
       totalReports: reports.count || 0,
       totalRevenue: payments.data?.reduce((sum, p) => p.status === 'completed' ? sum + p.amount : sum, 0) || 0
     }
+  },
+
+  // QR Code Management
+  async uploadQRCode(userId: string, file: File, type: 'mess' | 'upi') {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${userId}/${type}-qr-${Date.now()}.${fileExt}`
+    const { error } = await supabase.storage
+      .from('qr-codes')
+      .upload(fileName, file, { upsert: true })
+    
+    if (error) return { data: null, error }
+    
+    const { data: urlData } = supabase.storage
+      .from('qr-codes')
+      .getPublicUrl(fileName)
+    
+    return { data: urlData.publicUrl, error: null }
+  },
+
+  async updateDefaultQRCodes(userId: string, messQR?: string, upiQR?: string) {
+    const updates: any = { updated_at: new Date().toISOString() }
+    if (messQR !== undefined) updates.default_mess_qr = messQR
+    if (upiQR !== undefined) updates.default_upi_qr = upiQR
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async deleteQRCode(url: string) {
+    // Extract file path from URL
+    const path = url.split('/qr-codes/')[1]
+    if (!path) return { error: new Error('Invalid QR code URL') }
+    
+    const { error } = await supabase.storage
+      .from('qr-codes')
+      .remove([path])
+    
+    return { error }
   },
 
   // Real-time subscriptions

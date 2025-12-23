@@ -274,3 +274,35 @@ CREATE POLICY "Admins can update user stats" ON user_stats
 UPDATE profiles 
 SET is_admin = true, admin_role = 'super_admin'
 WHERE email = 'rishit.nanda.21@gmail.com';
+
+-- Add QR code columns to profiles table
+ALTER TABLE profiles 
+ADD COLUMN IF NOT EXISTS default_mess_qr TEXT,
+ADD COLUMN IF NOT EXISTS default_upi_qr TEXT;
+
+-- Add QR code columns to listings table
+ALTER TABLE listings 
+ADD COLUMN IF NOT EXISTS mess_qr TEXT,
+ADD COLUMN IF NOT EXISTS upi_qr TEXT;
+
+-- Create storage bucket for QR codes (if not exists)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('qr-codes', 'qr-codes', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Set up storage policies for QR codes
+CREATE POLICY "Users can upload their own QR codes"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'qr-codes' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "QR codes are publicly accessible"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'qr-codes');
+
+CREATE POLICY "Users can update their own QR codes"
+ON storage.objects FOR UPDATE
+USING (bucket_id = 'qr-codes' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "Users can delete their own QR codes"
+ON storage.objects FOR DELETE
+USING (bucket_id = 'qr-codes' AND auth.uid()::text = (storage.foldername(name))[1]);
