@@ -5,21 +5,12 @@ import ProfileComponent from './src/components/ProfileComponent'
 import SettingsComponent from './src/components/SettingsComponent'
 import { Moon, Sun } from 'lucide-react'
 
-import AdminPanel from './src/components/AdminPanel';
-import RatingModal from './src/components/RatingModal';
-import ReportModal from './src/components/ReportModal';
-import UserRatingDisplay from './src/components/UserRatingDisplay';
-
-// Add state
-const [showAdminPanel, setShowAdminPanel] = useState(false);
-const [showRatingModal, setShowRatingModal] = useState(false);
-const [showReportModal, setShowReportModal] = useState(false);
-
-// Define User interface
+// Define User interface with is_admin field
 interface User {
   id: string
   name: string
   email: string
+  is_admin?: boolean
 }
 
 // Define proper types for update callbacks
@@ -138,19 +129,3 @@ export default function App() {
     </div>
   )
 }
-
-// Add admin button (only for admins)
-{currentUser.is_admin && (
-  <button onClick={() => setShowAdminPanel(true)}>
-    Admin Panel
-  </button>
-)}
-
-// Add modals
-{showAdminPanel && (
-  <AdminPanel
-    darkMode={darkMode}
-    currentUserId={currentUser.id}
-    onClose={() => setShowAdminPanel(false)}
-  />
-)}
