@@ -37,6 +37,8 @@ interface Listing {
   createdAt: number;
   sellerName: string;
   sellerId: string;
+  messQR?: string | null;
+  upiQR?: string | null;
 }
 
 interface Notification {
@@ -81,6 +83,116 @@ export const generateUPIQR = (amount: number, seller: string) => {
   return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiString)}`;
 };
 
+// QR Display Modal Component
+interface QRDisplayModalProps {
+  listing: Listing;
+  darkMode: boolean;
+  onClose: () => void;
+}
+
+const QRDisplayModal: React.FC<QRDisplayModalProps> = ({ listing, darkMode, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white'} rounded-lg max-w-2xl w-full p-6`}>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-2xl font-bold">Transaction QR Codes</h2>
+            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              {listing.mess} - {listing.mealTime}
+            </p>
+          </div>
+          <button onClick={onClose} className="hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-lg">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className={`p-4 rounded-lg mb-6 ${darkMode ? 'bg-blue-900/30' : 'bg-blue-50'}`}>
+          <p className="text-sm font-semibold mb-2">Transaction Details</p>
+          <div className="space-y-1 text-sm">
+            <p><strong>Final Price:</strong> ₹{listing.currentPrice}</p>
+            <p><strong>Date:</strong> {new Date(listing.date).toLocaleDateString()}</p>
+            <p><strong>Status:</strong> <span className="text-green-600 dark:text-green-400">Sold</span></p>
+          </div>
+        </div>
+
+        {(listing.messQR || listing.upiQR) ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {listing.messQR && (
+              <div className="text-center">
+                <div className={`p-4 rounded-lg border-2 ${darkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <QrCode className="w-5 h-5 text-blue-500" />
+                    <h3 className="font-semibold">Mess QR Code</h3>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Buyer: Scan to receive mess
+                  </p>
+                  <img 
+                    src={listing.messQR} 
+                    alt="Mess QR Code" 
+                    className="w-full max-w-[250px] mx-auto border-4 border-white dark:border-gray-800 rounded-lg shadow-lg"
+                  />
+                  <a
+                    href={listing.messQR}
+                    download="mess-qr.png"
+                    className="inline-block mt-3 text-sm text-blue-500 hover:text-blue-600"
+                  >
+                    Download QR
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {listing.upiQR && (
+              <div className="text-center">
+                <div className={`p-4 rounded-lg border-2 ${darkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <IndianRupee className="w-5 h-5 text-green-500" />
+                    <h3 className="font-semibold">UPI QR Code</h3>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Buyer: Scan to pay ₹{listing.currentPrice}
+                  </p>
+                  <img 
+                    src={listing.upiQR} 
+                    alt="UPI QR Code" 
+                    className="w-full max-w-[250px] mx-auto border-4 border-white dark:border-gray-800 rounded-lg shadow-lg"
+                  />
+                  <a
+                    href={listing.upiQR}
+                    download="upi-qr.png"
+                    className="inline-block mt-3 text-sm text-blue-500 hover:text-blue-600"
+                  >
+                    Download QR
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <QrCode className={`w-16 h-16 mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`} />
+            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              No QR codes available for this listing
+            </p>
+          </div>
+        )}
+
+        <div className={`mt-6 p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            💡 <strong>Next Steps:</strong>
+          </p>
+          <ol className="text-xs text-gray-600 dark:text-gray-400 mt-2 space-y-1 ml-4 list-decimal">
+            <li>Buyer scans Mess QR to receive mess access</li>
+            <li>Buyer scans UPI QR to complete payment</li>
+            <li>Transaction is complete!</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Notification Component
 interface NotificationToastProps {
   notifications: Notification[];
@@ -114,6 +226,7 @@ interface ListingCardProps {
   onRateUser: (target: RatingTarget) => void;
   onReportUser: (target: ReportTarget) => void;
   onViewRating: (userId: string) => void;
+  onViewQRCodes: (listing: Listing) => void;
 }
 
 const ListingCard: React.FC<ListingCardProps> = ({ 
@@ -125,7 +238,8 @@ const ListingCard: React.FC<ListingCardProps> = ({
   onUnlist,
   onRateUser,
   onReportUser,
-  onViewRating
+  onViewRating,
+  onViewQRCodes
 }) => {
   const [timeRemaining, setTimeRemaining] = useState(getTimeRemaining(listing.endTime));
   const [bidAmount, setBidAmount] = useState('');
@@ -296,6 +410,17 @@ const ListingCard: React.FC<ListingCardProps> = ({
             Report Issue
           </button>
         )}
+
+        {/* View QR Codes Button for Sold Listings */}
+        {listing.status === 'sold' && (listing.messQR || listing.upiQR) && (
+          <button
+            onClick={() => onViewQRCodes(listing)}
+            className={`w-full ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} py-2 rounded-lg font-medium flex items-center justify-center gap-2 text-blue-600 dark:text-blue-400`}
+          >
+            <QrCode className="w-4 h-4" />
+            View QR Codes
+          </button>
+        )}
       </div>
     </div>
   );
@@ -322,6 +447,10 @@ export default function Home({
   const [showUserRating, setShowUserRating] = useState(false);
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  
+  // QR Modal states
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedQRListing, setSelectedQRListing] = useState<Listing | null>(null);
 
   // Load unread notification count
   useEffect(() => {
@@ -395,6 +524,11 @@ export default function Home({
   const handleViewRating = (userId: string) => {
     setViewingUserId(userId);
     setShowUserRating(true);
+  };
+
+  const handleViewQRCodes = (listing: Listing) => {
+    setSelectedQRListing(listing);
+    setShowQRModal(true);
   };
 
   const submitRating = async (rating: number, review: string) => {
@@ -542,6 +676,17 @@ export default function Home({
         />
       )}
 
+      {showQRModal && selectedQRListing && (
+        <QRDisplayModal
+          listing={selectedQRListing}
+          darkMode={darkMode}
+          onClose={() => {
+            setShowQRModal(false);
+            setSelectedQRListing(null);
+          }}
+        />
+      )}
+
       <main className="max-w-7xl mx-auto px-4 py-6">
         {listings.filter(l => l.status !== 'unlisted').length === 0 ? (
           <div className="text-center py-12">
@@ -563,6 +708,7 @@ export default function Home({
                 onRateUser={handleRateUser}
                 onReportUser={handleReportUser}
                 onViewRating={handleViewRating}
+                onViewQRCodes={handleViewQRCodes}
               />
             ))}
           </div>
