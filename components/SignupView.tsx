@@ -515,7 +515,39 @@ export function SignupView({
           <div className="relative group">
             <GraduationCap className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${darkMode ? 'text-gray-500' : 'text-gray-400'} group-focus-within:text-[#3A7DFF] transition-colors`} />
             <input
-              id="college-email"
-              type="email"
+              id="college-email"type="email"
               value={collegeEmail}
-              onChange={(e) => setCol
+              onChange={(e) => setCollegeEmail(e.target.value)}
+              placeholder="you@university.edu"
+              required
+              className={`w-full pl-12 pr-4 py-3.5 border-2 ${
+                darkMode 
+                  ? 'bg-[#2A2B30] border-gray-700 text-white placeholder-gray-500' 
+                  : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'
+              } rounded-xl focus:outline-none focus:border-[#3A7DFF] focus:ring-4 focus:ring-[#3A7DFF]/10 transition-all`}
+            />
+          </div>
+        </div>
+
+        {/* Complete Sign Up Button */}
+        <button
+          onClick={handleCompleteSignUp}
+          className="w-full py-4 bg-gradient-to-r from-[#3A7DFF] to-[#18C7B9] text-white rounded-xl hover:shadow-lg hover:shadow-[#3A7DFF]/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+        >
+          Complete Sign Up
+        </button>
+
+        {/* Back Link */}
+        <p className={`text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} pt-4`}>
+          <button 
+            type="button"
+            onClick={() => setAuthMode('login')}
+            className="text-[#3A7DFF] hover:text-[#18C7B9] hover:underline transition-all"
+          >
+            ← Back to Login
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
